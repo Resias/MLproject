@@ -152,9 +152,9 @@ class MLdataset(Dataset):
             return self.data[index]
 
 if __name__ == '__main__':
-    path = r'F:\MLProject\data\test.csv'
+    path = r'/workspace/MLProject/data/train.csv'
     mode = 'valid'
-    window = 24
+    window = 24*20
     hop = 6
     dataset = MLdataset(path, mode, window, hop)
     

@@ -30,34 +30,35 @@ sr_ = Style.RESET_ALL
 
 def evaluate(model,valid_loader,criterion):
     model.eval()
-    total = 0.0
     valid_loss = 0
     true_labels = []
     pred_labels = []
-    label_len = 0
     with torch.no_grad():
         for i, (data, labels) in enumerate(valid_loader):
             inputs_t = data[:,:,:4]
             inputs = data[:,:,4:]
-            
-            total += inputs.shape[0] * inputs.shape[1]
 
             output = model(inputs,inputs_t,inputs,inputs_t)
             
             labels = labels.to(output.device)
-            label_len = labels.shape[1]
                 
             loss = criterion(output, labels)
             valid_loss += loss.item()
             
                 
-            true_labels.append(labels.cpu().numpy())
-            pred_labels.append(output.cpu().numpy())
+            true_labels.append(labels.cpu().numpy().reshape(-1,1))
+            pred_labels.append(output.cpu().numpy().reshape(-1,1))
                 
     
     metrics = {}
-    true = np.concatenate(true_labels, axis=0).reshape(-1,label_len)
-    pred = np.concatenate(pred_labels, axis=0).reshape(-1,label_len)
+    true = np.concatenate(true_labels, axis=0)
+    pred = np.concatenate(pred_labels, axis=0)
+    
+    # print(true.shape)
+    # print(true[0])
+    # print(pred.shape)
+    # print(pred[0])
+    # exit()
     
     # 성능 지표 계산
     name = 'Temperature'
@@ -78,7 +79,7 @@ def evaluate(model,valid_loader,criterion):
     print(f"MedAE: {metrics[name]['MedAE']:.4f}")
     print('-' * 50)
     
-    valid_loss /= total
+    valid_loss /= len(valid_dl)
     return valid_loss
 
 def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
@@ -86,15 +87,12 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
                             total_epoch,
                             save_path,exp_date,lr_scheduler=None):
     train_loss = 0
-    total = 0.0
     model.train()
     for i, (data, label) in enumerate(train_loader):
         optimizer.zero_grad()
         
         inputs_t = data[:,:,:4]
         inputs = data[:,:,4:]
-        
-        total += inputs.shape[0] * inputs.shape[1]
 
         output = model(inputs,inputs_t,inputs,inputs_t)
         
@@ -108,12 +106,12 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
 
         try:
             if (i+1) % (len(train_loader) // 4) == 0:
-                print(f"[Epoch {epoch}/{total_epoch}] [Batch {i}/{len(train_loader)}] [loss: {loss/(inputs.shape[0] * inputs.shape[1])}]")
+                print(f"[Epoch {epoch}/{total_epoch}] [Batch {i}/{len(train_loader)}] [loss: {loss/(inputs.shape[0])}]")
         except:
             if (i+1) % (len(train_loader) // 2) == 0:
-                print(f"[Epoch {epoch}/{total_epoch}] [Batch {i}/{len(train_loader)}] [loss: {loss/(inputs.shape[0] * inputs.shape[1])}]")
+                print(f"[Epoch {epoch}/{total_epoch}] [Batch {i}/{len(train_loader)}] [loss: {loss/(inputs.shape[0])}]")
                 
-    train_loss /= total
+    train_loss /= len(train_loader)
     valid_loss = evaluate(model,valid_loader,criterion)
     if lr_scheduler:
         lr_scheduler.step(valid_loss)
@@ -124,86 +122,15 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
                })
     
     if valid_loss <= best_v_loss:
-        print(f"{g_}Loss Decreased from {best_v_loss} to {valid_loss}{sr_}")
+        print(f"{g_}VALID Loss Decreased from {best_v_loss} to {valid_loss}{sr_}")
         best_v_loss = valid_loss
         torch.save(model.state_dict(),os.path.join(save_path,f'{exp_date}_BestValidLoss_informer.pt'))
     if train_loss <= best_t_loss:
-        print(f"{g_}Loss Decreased from {best_t_loss} to {train_loss}{sr_}")
+        print(f"{g_}TRAIN Loss Decreased from {best_t_loss} to {train_loss}{sr_}")
         best_t_loss = train_loss
         torch.save(model.state_dict(),os.path.join(save_path,f'{exp_date}_BestTrainLoss_informer.pt'))
         
     return best_t_loss, best_v_loss
-
-def get_class_counts(dataset, class_list=[5, 9, 5, 2]):
-    """
-    클래스별 레이블 개수를 계산합니다.
-
-    Args:
-        dataset (Dataset): PyTorch Dataset 객체.
-        class_list (list): 각 레이블 그룹별 클래스 수. 예: [m_classes, g_classes, la_classes, ra_classes]
-
-    Returns:
-        dict: 각 레이블 그룹별 클래스별 레이블 개수를 담은 사전.
-    """
-    if len(class_list) > 1:
-        m_classes, g_classes, la_classes, ra_classes = class_list
-        
-        # 클래스별 카운트 초기화
-        m_counts = torch.zeros(m_classes)
-        g_counts = torch.zeros(g_classes)
-        la_counts = torch.zeros(la_classes)
-        ra_counts = torch.zeros(ra_classes)
-
-        # 데이터셋 순회
-        for sample in dataset:
-            # 레이블 추출
-            m_label, g_label, la_label, ra_label = sample[4]
-            
-            # 텐서로 변환하여 카운트 누적
-            m_counts += torch.tensor(m_label, dtype=torch.float32)
-            g_counts += torch.tensor(g_label, dtype=torch.float32)
-            la_counts += torch.tensor(la_label, dtype=torch.float32)
-            ra_counts += torch.tensor(ra_label, dtype=torch.float32)
-
-        return {
-            'motor': m_counts,
-            'gearbox': g_counts,
-            'left_axlebox': la_counts,
-            'right_axlebox': ra_counts
-        }
-    else:
-        classes = class_list[0]
-        class_counts = torch.zeros(classes)
-        for sample in dataset:
-            # 레이블 추출
-            labels = sample[4][0]
-
-            # 텐서로 변환하여 카운트 누적
-            class_counts += torch.tensor(labels, dtype=torch.float32)
-        return {
-            'classes': class_counts
-        }
-
-def calculate_pos_weight(class_counts, total_samples):
-    """
-    각 클래스의 pos_weight를 계산합니다.
-
-    Args:
-        class_counts (dict): 클래스별 레이블 개수를 담은 사전.
-        total_samples (int): 전체 샘플 수.
-
-    Returns:
-        dict: 클래스별 pos_weight를 담은 사전.
-    """
-    pos_weights = {}
-    for i, (label_group, counts) in enumerate(class_counts.items()):
-        # 음성 샘플 수 = 전체 샘플 수 - 양성 샘플 수
-        neg_counts = total_samples[i] - counts
-        pos_weight = neg_counts / counts
-        pos_weights[label_group] = pos_weight
-    # print(pos_weights)
-    # exit()
-    return pos_weights
 
 if __name__ == '__main__':
     # torch.set_default_dtype(torch.float32)
@@ -213,14 +140,15 @@ if __name__ == '__main__':
         # [24*2, 12, False, ''],
         # [24*3, 12, False, ''],
         # [24*4, 12, False, ''],
-        # [24*5, 12, False, ''],
+        [24*5, 12, False, ''],
         # [24*6, 12, False, ''],
         # [24*7, 12, False, ''],
-        # [24*10, 12, False, ''],
-        [24*15, 12, False, ''],
+        [24*10, 12, False, ''],
+        # [24*15, 12, False, ''],
         [24*20, 12, False, ''],
-        # [24*25, 12, False, ''],
-        # [24*30, 12, False, '']
+        [24*25, 12, False, ''],
+        [24*30, 12, False, ''],
+        [24*40, 12, False, '']
     ]
     
     for win, h, load, config_exp in config:
@@ -235,7 +163,7 @@ if __name__ == '__main__':
         # config
         # learing config
         epochs = 100
-        batch_size = 32
+        batch_size = 16
         lr = 1e-2
         
         # data config
@@ -251,12 +179,12 @@ if __name__ == '__main__':
         dataset = MLdataset(path, mode, window, hop)
         
         # 데이터셋 분할
-        train_ratio = 0.7
+        train_ratio = 0.9
         train_size = int(train_ratio * len(dataset))
-        # valid_size = len(dataset) - train_size
-        # train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
-        train_dataset = dataset[:train_size]
-        valid_dataset = dataset[train_size:]
+        valid_size = len(dataset) - train_size
+        train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
+        # train_dataset = dataset[:train_size]
+        # valid_dataset = dataset[train_size:]
 
         # DataLoader 생성
         train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
