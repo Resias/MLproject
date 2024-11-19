@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 from dataset import MLdataset
-from models.model import InformerStack
+from models.model import InformerStack, Informer
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, median_absolute_error
 
 import warnings
@@ -45,7 +45,7 @@ def evaluate(model,valid_loader,criterion):
             loss = criterion(output, labels)
             valid_loss += loss.item()
             
-                
+            
             true_labels.append(labels.cpu().numpy().reshape(-1,1))
             pred_labels.append(output.cpu().numpy().reshape(-1,1))
                 
@@ -79,7 +79,7 @@ def evaluate(model,valid_loader,criterion):
     print(f"MedAE: {metrics[name]['MedAE']:.4f}")
     print('-' * 50)
     
-    valid_loss /= len(valid_dl)
+    valid_loss /= len(valid_loader)
     return valid_loss
 
 def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
@@ -97,6 +97,9 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
         output = model(inputs,inputs_t,inputs,inputs_t)
         
         label = label.to(output.device)
+        # print(label.shape)
+        # print(output.shape)
+        # exit()
             
         loss = criterion(output, label)
 
@@ -114,7 +117,7 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
     train_loss /= len(train_loader)
     valid_loss = evaluate(model,valid_loader,criterion)
     if lr_scheduler:
-        lr_scheduler.step(valid_loss)
+        lr_scheduler.step(train_loss)
     print(f"\nEpoch:{epoch}\nTrain Loss:{train_loss} |Valid Loss:{valid_loss}")
     wandb.log({"Train Loss": train_loss,
                "Valid Loss": valid_loss,
@@ -140,10 +143,10 @@ if __name__ == '__main__':
         # [24*2, 12, False, ''],
         # [24*3, 12, False, ''],
         # [24*4, 12, False, ''],
-        [24*5, 12, False, ''],
+        # [24*5, 12, False, ''],
         # [24*6, 12, False, ''],
         # [24*7, 12, False, ''],
-        [24*10, 12, False, ''],
+        # [24*10, 12, False, ''],
         # [24*15, 12, False, ''],
         [24*20, 12, False, ''],
         [24*25, 12, False, ''],
@@ -158,12 +161,12 @@ if __name__ == '__main__':
         exp_date = now.strftime('%m%d-%S%M')
         
         # device Setting
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
         
         # config
         # learing config
         epochs = 100
-        batch_size = 16
+        batch_size = 128
         lr = 1e-2
         
         # data config
@@ -175,30 +178,39 @@ if __name__ == '__main__':
         seq_len = label_len = out_len = win # 인코더, 디코더 입력 시퀀스 길이, 출력 시퀀스 길이
         
         ############## loading data ###################
-        path = r'/workspace/MLProject/data/train.csv'
+        path = r'/workspace/MLProject/MLproject/data/train.csv'
         dataset = MLdataset(path, mode, window, hop)
         
         # 데이터셋 분할
-        train_ratio = 0.9
-        train_size = int(train_ratio * len(dataset))
-        valid_size = len(dataset) - train_size
-        train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
+        # train_ratio = 1
+        # train_size = int(train_ratio * len(dataset))
+        # valid_size = len(dataset) - train_size
+        # train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
         # train_dataset = dataset[:train_size]
         # valid_dataset = dataset[train_size:]
 
         # DataLoader 생성
-        train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-        valid_dl = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+        train_dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        valid_dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
             
 
-        model = InformerStack(enc_in - 4,
-                              dec_in - 4,
-                              c_out,
-                              seq_len,
-                              label_len,
-                              out_len,
-                              dropout=0.2
-                              )
+        # model = InformerStack(enc_in - 4,
+        #                       dec_in - 4,
+        #                       c_out,
+        #                       seq_len,
+        #                       label_len,
+        #                       out_len,
+        #                       dropout=0.2
+        #                       )
+        
+        model = Informer(enc_in - 4,
+                         dec_in - 4,
+                         c_out,
+                         seq_len,
+                         label_len,
+                         out_len,
+                         n_heads=4,
+                         dropout=0.2)
         
         # load model
         if load:
@@ -215,7 +227,7 @@ if __name__ == '__main__':
         model,train_dl,valid_dl,optimizer,lr_scheduler,criterion = accelerator.prepare(model,train_dl,valid_dl,optimizer,lr_scheduler,criterion)
         
         # WandB 초기화
-        project_name = "ML-TeamProject"
+        project_name = "ML-TeamProject87"
 
         # saved_Model dir Create
         save_path = os.path.join(os.getcwd(),'saved_Model')
@@ -241,12 +253,11 @@ if __name__ == '__main__':
         
         config = wandb.config
         config.update({
-            "model code": 'informerStack',
+            "model code": 'informer',
             "batch_size": batch_size,
             "learning_rate": lr,
             "optimizer": "Adam",
-            "input sequence len": win,
-            "input sequence hop": hop
+            "input sequence len": win
         })
         
         best_v_loss = 9999999

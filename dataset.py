@@ -122,7 +122,7 @@ def prepare(data, columns, mode, window, hop):
                     columns[15],columns[16]]
         
     data = minmaxScale(data, minmax_column)
-    data = stdScale(data, std_column)
+    # data = stdScale(data, std_column)
     data = interpol(data, columns)
     data = windowed(data, mode, window, hop)
     return data
