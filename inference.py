@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 from dataset import MLdataset
-from models.model import InformerStack
+from models.model import InformerStack, Informer
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, median_absolute_error
 
 import warnings
@@ -41,7 +41,6 @@ def plot_and_save_result(time, real, predicted, filename):
     plt.savefig(filename)
     plt.close()
 
-
 def inference(load_path, save_path, model, dl, criterion):
     inference_loss = 0
     true_labels = []
@@ -51,8 +50,8 @@ def inference(load_path, save_path, model, dl, criterion):
     with torch.no_grad():
         for i, (data, labels) in enumerate(dl):
             inputs_t = data[:,:,:4]
-            batch_s, window, date = inputs_t.shape
             inputs = data[:,:,4:]
+            batch_s, window, date = inputs_t.shape
 
             output = model(inputs,inputs_t,inputs,inputs_t)
             
@@ -106,17 +105,13 @@ def inference(load_path, save_path, model, dl, criterion):
     
     return inference_loss, metrics
 
-
-
-def make_result(model, dl):
-    true_labels = []
+def make_result(model, dl,id):
     pred_labels = []
     time_list = []
     total = 0.0
-    label_len = 0
     model.eval()
     with torch.no_grad():
-        for i, (data, labels) in enumerate(dl):
+        for i, data in enumerate(dl):
             inputs_t = data[:,:,:4]
             batch_s, window, date = inputs_t.shape
             inputs = data[:,:,4:]
@@ -125,22 +120,35 @@ def make_result(model, dl):
 
             output = model(inputs,inputs_t,inputs,inputs_t)
             
-            labels = labels.to(output.device)
-            label_len = labels.shape[1]
-
             
             inputs_t = inputs_t.cpu().numpy().reshape(-1,date)
-            time_list.append([datetime(int(item[0]),int(item[1]),int(item[2]),int(item[3]))for item in inputs_t])
-            true_labels.append(labels.cpu().numpy())
-            pred_labels.append(output.cpu().numpy())
+            time_list.append([[int(item[0]),int(item[1]),int(item[2]),int(item[3])] for item in inputs_t])
+            pred_labels.append(output.cpu().numpy().reshape(-1,1))
         
-        metrics = {}
-        time_list = np.concatenate(time_list, axis=0).reshape(-1,label_len).reshape(-1)
-        true = np.concatenate(true_labels, axis=0).reshape(-1,label_len).reshape(-1)
-        pred = np.concatenate(pred_labels, axis=0).reshape(-1,label_len).reshape(-1)
+        time_list = np.concatenate(time_list, axis=0)
+        years = np.array([dt[0] for dt in time_list])
+        moths = np.array([dt[1] for dt in time_list])
+        days = np.array([dt[2] for dt in time_list])
+        hours = np.array([dt[3] for dt in time_list])
+        pred = np.concatenate(pred_labels, axis=0)
+        pred = pred.reshape(-1)
+        pred = np.ceil(pred*10)/10
+        # print(time_list.shape)
+        # print(years.shape)
+        # print(moths.shape)
+        # print(days.shape)
+        # print(hours.shape)
         
-        df = pd.DataFrame({'time':time_list,'RealTemperature':true,'Predicted':pred})
-        df.to_csv('submission_test.csv', index=False, encoding='utf-8')
+        
+        df = pd.DataFrame({
+            'ID': range(1,len(years)+1),
+            'Year':years,
+            'Month':moths,
+            'Day':days,
+            'Hour':hours,
+            'Temperature':pred
+        })
+        df.to_csv(str(id) +'submission_test.csv', index=False, encoding='utf-8')
         
 
 
@@ -157,30 +165,30 @@ if __name__ == '__main__':
     # data config
     
     # inferencing config
-    load_exp = '1105-3346'
-    project_name = 'ML-TeamProject'
-    batch_size = 4
-    mode = 'train'
-    window = 24*1
-    hop = 0
+    load_exp = '1120-0207'
+    project_name = 'ML-TeamProject87'
+    batch_size = 1
+    mode = 'valid'
+    window = 24*2
+    hop = 12
     enc_in = dec_in = 16    # 인코더, 디코더 입력 차원 수 (예: 피처 수 16)
     c_out = 1               # 출력 차원 수 (예: 예측할 온도 값의 차원 1)
     seq_len = label_len = out_len = window # 인코더, 디코더 입력 시퀀스 길이, 출력 시퀀스 길이
     
     ############## loading data ###################
-    path = r'/workspace/MLProject/data/train.csv'
+    path = r'/workspace/MLProject/MLproject/data/test.csv'
     dataset = MLdataset(path, mode, window, hop)
-    dl = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    load_path = os.path.join(os.getcwd(),'saved_Model',f'{project_name}_result',load_exp,f'{load_exp}_BestTrainLoss_informer.pt')
-    model = InformerStack(enc_in - 4,
-                            dec_in - 4,
-                            c_out,
-                            seq_len,
-                            label_len,
-                            out_len,
-                            dropout=0.2
-                            )
+    load_path = os.path.join(os.getcwd(),'saved_Model',f'{project_name}_result',load_exp,f'{load_exp}_BestTrainLoss_informer.pt')    
+    model = Informer(enc_in - 4,
+                        dec_in - 4,
+                        c_out,
+                        seq_len,
+                        label_len,
+                        out_len,
+                        n_heads=4,
+                        dropout=0.2)
     model.load_state_dict(torch.load(load_path))
     criterion = nn.MSELoss()
     
@@ -205,25 +213,26 @@ if __name__ == '__main__':
     best_loss = 9999999
     start_time = time.time()
     print(f"{project_name}\nInference Started")
-    inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
+    # inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
+    make_result(model,dl,1)
     end_time = time.time()
     print(f'{end_time - start_time} time executed..\n')
     
     
     ############## loading data ###################
-    path = r'/workspace/MLProject/data/train.csv'
+    path = r'/workspace/MLProject/MLproject/data/test.csv'
     dataset = MLdataset(path, mode, window, hop)
-    dl = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     load_path = os.path.join(os.getcwd(),'saved_Model',f'{project_name}_result',load_exp,f'{load_exp}_BestValidLoss_informer.pt')
-    model = InformerStack(enc_in - 4,
-                            dec_in - 4,
-                            c_out,
-                            seq_len,
-                            label_len,
-                            out_len,
-                            dropout=0.2
-                            )
+    model = Informer(enc_in - 4,
+                        dec_in - 4,
+                        c_out,
+                        seq_len,
+                        label_len,
+                        out_len,
+                        n_heads=4,
+                        dropout=0.2)
     model.load_state_dict(torch.load(load_path))
     criterion = nn.MSELoss()
     
@@ -248,8 +257,8 @@ if __name__ == '__main__':
     best_loss = 9999999
     start_time = time.time()
     print(f"{project_name}\nInference Started")
-    inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
-    make_result(model,dl)
+    # inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
+    make_result(model,dl,2)
     end_time = time.time()
     print(f'{end_time - start_time} time executed..\n')
     

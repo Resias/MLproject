@@ -145,13 +145,13 @@ if __name__ == '__main__':
         # [24*4, 12, False, ''],
         # [24*5, 12, False, ''],
         # [24*6, 12, False, ''],
+        
         # [24*7, 12, False, ''],
-        # [24*10, 12, False, ''],
-        # [24*15, 12, False, ''],
+        [24*10, 12, False, ''],
+        [24*14, 12, False, ''],
         [24*20, 12, False, ''],
-        [24*25, 12, False, ''],
-        [24*30, 12, False, ''],
-        [24*40, 12, False, '']
+        [24*26, 12, False, ''],
+        [24*30, 12, False, '']
     ]
     
     for win, h, load, config_exp in config:
@@ -165,9 +165,9 @@ if __name__ == '__main__':
         
         # config
         # learing config
-        epochs = 100
-        batch_size = 128
-        lr = 1e-2
+        epochs = 150
+        batch_size = 256
+        lr = 1e-4
         
         # data config
         mode = 'train'
@@ -182,16 +182,14 @@ if __name__ == '__main__':
         dataset = MLdataset(path, mode, window, hop)
         
         # 데이터셋 분할
-        # train_ratio = 1
-        # train_size = int(train_ratio * len(dataset))
-        # valid_size = len(dataset) - train_size
-        # train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
-        # train_dataset = dataset[:train_size]
-        # valid_dataset = dataset[train_size:]
+        train_ratio = 0.8
+        train_size = int(train_ratio * len(dataset))
+        valid_size = len(dataset) - train_size
+        train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
 
         # DataLoader 생성
-        train_dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        valid_dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        valid_dl = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
             
 
         # model = InformerStack(enc_in - 4,

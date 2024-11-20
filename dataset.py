@@ -97,14 +97,16 @@ def windowed(data, mode, window, hop):
         X, y = [], []
         temper = data['Temperature']
         data = data.drop(columns=['Temperature'])
-        for i in range(len(data) - window):
+        for i in range(0,len(data) - window - hop, hop):
             X.append(data[i:i+window].to_numpy())
             y.append(temper[i:i+window].to_numpy())
         return np.array(X), np.array(y)
     elif mode == 'valid' or mode == 'validation':
         X = []
-        for i in range(len(data) - window):
+        data = data.drop(columns=['ID'])
+        for i in range(0,len(data) - window, window):
             X.append(data[i:i+window].to_numpy())
+        X.append(data[-window:].to_numpy())
         return np.array(X)
 
 def prepare(data, columns, mode, window, hop):
@@ -114,17 +116,19 @@ def prepare(data, columns, mode, window, hop):
                     columns[10],columns[11],columns[12],
                     columns[13],columns[14],columns[15],
                     columns[16],columns[17]]
+        data = minmaxScale(data, minmax_column)
+        # data = stdScale(data, std_column)
+        data = interpol(data, columns)
+        data = windowed(data, mode, window, hop)
     elif mode == 'valid' or mode == 'validation':
         minmax_column = [columns[8],columns[16]]
         std_column = [columns[5],columns[6],columns[7],
                     columns[9],columns[10],columns[11],
                     columns[12],columns[13],columns[14],
                     columns[15],columns[16]]
+        data = minmaxScale(data, minmax_column)
+        data = windowed(data, mode, window, hop)
         
-    data = minmaxScale(data, minmax_column)
-    # data = stdScale(data, std_column)
-    data = interpol(data, columns)
-    data = windowed(data, mode, window, hop)
     return data
     
 
@@ -140,7 +144,10 @@ class MLdataset(Dataset):
         self.data = prepare(self.data, self.columns, self.mode, self.window, self.hop)
         
     def __len__(self):
-        return len(self.data[0])
+        if self.mode == "train":
+            return len(self.data[0])
+        elif self.mode == "valid":
+            return len(self.data)
 
     def __getitem__(self, index):
         if self.mode == 'train':
@@ -149,10 +156,10 @@ class MLdataset(Dataset):
             l = torch.tensor(l,dtype=torch.float32)
             return d, l
         elif self.mode == 'valid' or self.mode == 'validation':
-            return self.data[index]
+            return torch.tensor(self.data[index], dtype=torch.float32)
 
 if __name__ == '__main__':
-    path = r'/workspace/MLProject/data/train.csv'
+    path = r'/workspace/MLProject/MLproject/data/test.csv'
     mode = 'valid'
     window = 24*20
     hop = 6
