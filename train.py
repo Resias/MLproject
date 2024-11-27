@@ -117,7 +117,7 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
     train_loss /= len(train_loader)
     valid_loss = evaluate(model,valid_loader,criterion)
     if lr_scheduler:
-        lr_scheduler.step(train_loss)
+        lr_scheduler.step(valid_loss)
     print(f"\nEpoch:{epoch}\nTrain Loss:{train_loss} |Valid Loss:{valid_loss}")
     wandb.log({"Train Loss": train_loss,
                "Valid Loss": valid_loss,
@@ -143,15 +143,15 @@ if __name__ == '__main__':
         # [24*2, 12, False, ''],
         # [24*3, 12, False, ''],
         # [24*4, 12, False, ''],
-        # [24*5, 12, False, ''],
+        [24*5, 12, False, ''],
         # [24*6, 12, False, ''],
         
         # [24*7, 12, False, ''],
-        [24*10, 12, False, ''],
-        [24*14, 12, False, ''],
-        [24*20, 12, False, ''],
-        [24*26, 12, False, ''],
-        [24*30, 12, False, '']
+        # [24*10, 12, False, ''],
+        # [24*14, 12, False, ''],
+        # [24*20, 12, False, ''],
+        # [24*26, 12, False, ''],
+        # [24*30, 12, False, '']
     ]
     
     for win, h, load, config_exp in config:
@@ -161,12 +161,12 @@ if __name__ == '__main__':
         exp_date = now.strftime('%m%d-%S%M')
         
         # device Setting
-        # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
         
         # config
         # learing config
-        epochs = 150
-        batch_size = 256
+        epochs = 250
+        batch_size = 128
         lr = 1e-4
         
         # data config
@@ -182,33 +182,37 @@ if __name__ == '__main__':
         dataset = MLdataset(path, mode, window, hop)
         
         # 데이터셋 분할
-        train_ratio = 0.8
-        train_size = int(train_ratio * len(dataset))
-        valid_size = len(dataset) - train_size
-        train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
+        # train_ratio = 1
+        # train_size = int(train_ratio * len(dataset))
+        # valid_size = len(dataset) - train_size
+        # train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
 
         # DataLoader 생성
-        train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        valid_dl = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+        train_dl = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        valid_dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
             
 
-        # model = InformerStack(enc_in - 4,
-        #                       dec_in - 4,
-        #                       c_out,
-        #                       seq_len,
-        #                       label_len,
-        #                       out_len,
-        #                       dropout=0.2
-        #                       )
+        model = InformerStack(enc_in - 4,
+                              dec_in - 4,
+                              c_out,
+                              seq_len,
+                              label_len,
+                              out_len,
+                              d_model = 2048,
+                              n_heads=16,
+                              e_layers=[6,4,2,1],
+                              d_layers=3,
+                              dropout=0.2
+                              )
         
-        model = Informer(enc_in - 4,
-                         dec_in - 4,
-                         c_out,
-                         seq_len,
-                         label_len,
-                         out_len,
-                         n_heads=4,
-                         dropout=0.2)
+        # model = Informer(enc_in - 4,
+        #                  dec_in - 4,
+        #                  c_out,
+        #                  seq_len,
+        #                  label_len,
+        #                  out_len,
+        #                  n_heads=4,
+        #                  dropout=0.2)
         
         # load model
         if load:
@@ -251,10 +255,12 @@ if __name__ == '__main__':
         
         config = wandb.config
         config.update({
-            "model code": 'informer',
+            "model code": 'informerStack',
             "batch_size": batch_size,
             "learning_rate": lr,
             "optimizer": "Adam",
+            "d_model": 1024,
+            "num head": 16,
             "input sequence len": win
         })
         

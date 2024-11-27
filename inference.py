@@ -105,7 +105,7 @@ def inference(load_path, save_path, model, dl, criterion):
     
     return inference_loss, metrics
 
-def make_result(model, dl,id):
+def make_result(model, dl,id,save_path):
     pred_labels = []
     time_list = []
     total = 0.0
@@ -148,7 +148,10 @@ def make_result(model, dl,id):
             'Hour':hours,
             'Temperature':pred
         })
-        df.to_csv(str(id) +'submission_test.csv', index=False, encoding='utf-8')
+        if id == 1:
+            df.to_csv(os.path.join(save_path,'BT_submission_test.csv'), index=False, encoding='utf-8')
+        else:
+            df.to_csv(os.path.join(save_path,'BV_submission_test.csv'), index=False, encoding='utf-8')
         
 
 
@@ -165,11 +168,11 @@ if __name__ == '__main__':
     # data config
     
     # inferencing config
-    load_exp = '1120-0207'
+    load_exp = '1121-5120'
     project_name = 'ML-TeamProject87'
     batch_size = 1
     mode = 'valid'
-    window = 24*2
+    window = 24*20
     hop = 12
     enc_in = dec_in = 16    # 인코더, 디코더 입력 차원 수 (예: 피처 수 16)
     c_out = 1               # 출력 차원 수 (예: 예측할 온도 값의 차원 1)
@@ -181,14 +184,25 @@ if __name__ == '__main__':
     dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     load_path = os.path.join(os.getcwd(),'saved_Model',f'{project_name}_result',load_exp,f'{load_exp}_BestTrainLoss_informer.pt')    
-    model = Informer(enc_in - 4,
-                        dec_in - 4,
-                        c_out,
-                        seq_len,
-                        label_len,
-                        out_len,
-                        n_heads=4,
-                        dropout=0.2)
+    
+    model = InformerStack(enc_in - 4,
+                          dec_in - 4,
+                          c_out,
+                          seq_len,
+                          label_len,
+                          out_len,
+                          n_heads=16,
+                          dropout=0.2
+                          )
+    
+    # model = Informer(enc_in - 4,
+    #                     dec_in - 4,
+    #                     c_out,
+    #                     seq_len,
+    #                     label_len,
+    #                     out_len,
+    #                     n_heads=4,
+    #                     dropout=0.2)
     model.load_state_dict(torch.load(load_path))
     criterion = nn.MSELoss()
     
@@ -214,7 +228,7 @@ if __name__ == '__main__':
     start_time = time.time()
     print(f"{project_name}\nInference Started")
     # inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
-    make_result(model,dl,1)
+    make_result(model,dl,1,save_path)
     end_time = time.time()
     print(f'{end_time - start_time} time executed..\n')
     
@@ -225,14 +239,25 @@ if __name__ == '__main__':
     dl = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     load_path = os.path.join(os.getcwd(),'saved_Model',f'{project_name}_result',load_exp,f'{load_exp}_BestValidLoss_informer.pt')
-    model = Informer(enc_in - 4,
-                        dec_in - 4,
-                        c_out,
-                        seq_len,
-                        label_len,
-                        out_len,
-                        n_heads=4,
-                        dropout=0.2)
+    
+    model = InformerStack(enc_in - 4,
+                          dec_in - 4,
+                          c_out,
+                          seq_len,
+                          label_len,
+                          out_len,
+                          n_heads=16,
+                          dropout=0.2
+                          )
+    
+    # model = Informer(enc_in - 4,
+    #                     dec_in - 4,
+    #                     c_out,
+    #                     seq_len,
+    #                     label_len,
+    #                     out_len,
+    #                     n_heads=4,
+    #                     dropout=0.2)
     model.load_state_dict(torch.load(load_path))
     criterion = nn.MSELoss()
     
@@ -258,7 +283,7 @@ if __name__ == '__main__':
     start_time = time.time()
     print(f"{project_name}\nInference Started")
     # inference_loss, metrics = inference(load_path, save_path, model, dl, criterion)
-    make_result(model,dl,2)
+    make_result(model,dl,2,save_path)
     end_time = time.time()
     print(f'{end_time - start_time} time executed..\n')
     
