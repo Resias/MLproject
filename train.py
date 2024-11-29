@@ -37,17 +37,26 @@ def evaluate(model,valid_loader,criterion):
         for i, (data, labels) in enumerate(valid_loader):
             inputs_t = data[:,:,:4]
             inputs = data[:,:,4:]
-
-            output = model(inputs,inputs_t,inputs,inputs_t)
             
+            half_point_t = inputs_t.shape[2]//2
+            half_point_d = inputs_t.shape[2]//2
+            dec_t = torch.zeros_like(inputs_t).to(device=inputs_t.device)
+            dec_d = torch.zeros_like(inputs).to(device=inputs.device)
+            
+            dec_t[:, :, :half_point_t] = inputs_t[:, :, :half_point_t]
+            dec_d[:, :, :half_point_d] = inputs[:, :, :half_point_d]
+
+            output = model(inputs,inputs_t,dec_d,dec_t)
+            
+            half_point_l = labels.shape[1]//2
             labels = labels.to(output.device)
                 
-            loss = criterion(output, labels)
+            loss = criterion(output[:,:half_point_l], labels[:,half_point_l:])
             valid_loss += loss.item()
             
             
-            true_labels.append(labels.cpu().numpy().reshape(-1,1))
-            pred_labels.append(output.cpu().numpy().reshape(-1,1))
+            true_labels.append(labels[:,half_point_l:].cpu().numpy().reshape(-1,1))
+            pred_labels.append(output[:,:half_point_l].cpu().numpy().reshape(-1,1))
                 
     
     metrics = {}
@@ -93,15 +102,23 @@ def train_and_evaluate_loop(train_loader,valid_loader,model,optimizer,
         
         inputs_t = data[:,:,:4]
         inputs = data[:,:,4:]
-
-        output = model(inputs,inputs_t,inputs,inputs_t)
+        half_point_t = inputs_t.shape[2]//2
+        half_point_d = inputs_t.shape[2]//2
+        dec_t = torch.zeros_like(inputs_t).to(device=inputs_t.device)
+        dec_d = torch.zeros_like(inputs).to(device=inputs.device)
         
+        dec_t[:, :, :half_point_t] = inputs_t[:, :, :half_point_t]
+        dec_d[:, :, :half_point_d] = inputs[:, :, :half_point_d]
+
+        output = model(inputs,inputs_t,dec_d,dec_t)
+        
+        half_point_l = label.shape[1]//2
         label = label.to(output.device)
         # print(label.shape)
         # print(output.shape)
         # exit()
             
-        loss = criterion(output, label)
+        loss = criterion(output[:,:half_point_l], label[:,half_point_l:])
 
         accelerator.backward(loss) 
         optimizer.step()
@@ -139,19 +156,14 @@ if __name__ == '__main__':
     # torch.set_default_dtype(torch.float32)
     #   seqlen, hop, load, load_config_exp
     config = [
-        # [24*1, 12, False, ''],
-        # [24*2, 12, False, ''],
-        # [24*3, 12, False, ''],
-        # [24*4, 12, False, ''],
-        [24*5, 12, False, ''],
-        # [24*6, 12, False, ''],
-        
-        # [24*7, 12, False, ''],
-        # [24*10, 12, False, ''],
-        # [24*14, 12, False, ''],
-        # [24*20, 12, False, ''],
-        # [24*26, 12, False, ''],
-        # [24*30, 12, False, '']
+        # [24*1, 6, False, ''],
+        # [24*2, 6, False, ''],
+        # [24*7, 6, False, ''],
+        # [24*10, 6, False, ''],
+        [24*14, 6, False, ''],
+        # [24*20, 6, False, ''],
+        # [24*26, 6, False, ''],
+        # [24*30, 6, False, '']
     ]
     
     for win, h, load, config_exp in config:
@@ -165,15 +177,15 @@ if __name__ == '__main__':
         
         # config
         # learing config
-        epochs = 250
-        batch_size = 128
+        epochs = 100
+        batch_size = 64
         lr = 1e-4
         
         # data config
         mode = 'train'
         window = win
         hop = h
-        enc_in = dec_in = 16    # 인코더, 디코더 입력 차원 수 (예: 피처 수 16)
+        enc_in = dec_in = 18    # 인코더, 디코더 입력 차원 수 (예: 피처 수 16)
         c_out = 1               # 출력 차원 수 (예: 예측할 온도 값의 차원 1)
         seq_len = label_len = out_len = win # 인코더, 디코더 입력 시퀀스 길이, 출력 시퀀스 길이
         
@@ -198,11 +210,11 @@ if __name__ == '__main__':
                               seq_len,
                               label_len,
                               out_len,
-                              d_model = 2048,
+                              d_model = 512,
                               n_heads=16,
-                              e_layers=[6,4,2,1],
-                              d_layers=3,
-                              dropout=0.2
+                              e_layers=[4,1],
+                              d_layers=2,
+                              dropout=0.1
                               )
         
         # model = Informer(enc_in - 4,
@@ -211,8 +223,11 @@ if __name__ == '__main__':
         #                  seq_len,
         #                  label_len,
         #                  out_len,
-        #                  n_heads=4,
-        #                  dropout=0.2)
+        #                  d_model = 512,
+        #                  n_heads=16,
+        #                  e_layers=[4,1],
+        #                  d_layers=2,
+        #                  dropout=0.1)
         
         # load model
         if load:
@@ -229,7 +244,7 @@ if __name__ == '__main__':
         model,train_dl,valid_dl,optimizer,lr_scheduler,criterion = accelerator.prepare(model,train_dl,valid_dl,optimizer,lr_scheduler,criterion)
         
         # WandB 초기화
-        project_name = "ML-TeamProject87"
+        project_name = "ML-TeamProject87_ppt"
 
         # saved_Model dir Create
         save_path = os.path.join(os.getcwd(),'saved_Model')
@@ -259,7 +274,7 @@ if __name__ == '__main__':
             "batch_size": batch_size,
             "learning_rate": lr,
             "optimizer": "Adam",
-            "d_model": 1024,
+            "d_model": 512,
             "num head": 16,
             "input sequence len": win
         })

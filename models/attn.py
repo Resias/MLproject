@@ -124,7 +124,6 @@ class ProbAttention(nn.Module):
         
         return context.transpose(2,1).contiguous(), attn
 
-
 class AttentionLayer(nn.Module):
     def __init__(self, attention, d_model, n_heads, 
                  d_keys=None, d_values=None, mix=False):
